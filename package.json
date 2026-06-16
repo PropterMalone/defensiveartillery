@@ -2,6 +2,7 @@
   "name": "defensiveartillery",
   "version": "0.1.0",
   "private": true,
+  "license": "MIT",
   "type": "module",
   "description": "Fetch the quote-posts of a Bluesky post and bulk block/mute the rude ones, driven through Claude Code.",
   "engines": {
