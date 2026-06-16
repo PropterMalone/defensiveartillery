@@ -5,6 +5,7 @@
 import type { BlockRecord } from "./block-record.js";
 import type { RawPost } from "./quotes.js";
 import { type Result, err, ok } from "./result.js";
+import { rkeyFromAtUri } from "./sweep-log.js";
 
 // Routing: public reads (resolveHandle, getQuotes) go to the unauthenticated APPVIEW;
 // authenticated writes (createRecord, muteActor) go to the user's PDS (session.pds).
@@ -134,4 +135,67 @@ export async function muteActor(session: Session, did: string): Promise<Result<t
     body: JSON.stringify({ actor: did }),
   });
   return r.ok ? ok(true) : r;
+}
+
+export async function unmuteActor(session: Session, did: string): Promise<Result<true>> {
+  const r = await xrpc(session.pds, "app.bsky.graph.unmuteActor", {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      authorization: `Bearer ${session.accessJwt}`,
+    },
+    body: JSON.stringify({ actor: did }),
+  });
+  return r.ok ? ok(true) : r;
+}
+
+/** Delete a block record by its rkey (the reverse of createBlock). */
+export async function deleteBlock(session: Session, rkey: string): Promise<Result<true>> {
+  const r = await xrpc(session.pds, "com.atproto.repo.deleteRecord", {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      authorization: `Bearer ${session.accessJwt}`,
+    },
+    body: JSON.stringify({
+      repo: session.did,
+      collection: "app.bsky.graph.block",
+      rkey,
+    }),
+  });
+  return r.ok ? ok(true) : r;
+}
+
+/**
+ * List the user's existing block records as a subject-DID → rkey map. Used to unblock by DID
+ * when the block record's uri isn't known from the sweep log. Keeps the first rkey per subject.
+ */
+export async function listBlocks(session: Session): Promise<Result<Map<string, string>>> {
+  const map = new Map<string, string>();
+  let cursor: string | undefined;
+  for (let page = 0; page < 100; page++) {
+    const query: Record<string, string> = {
+      repo: session.did,
+      collection: "app.bsky.graph.block",
+      limit: "100",
+    };
+    if (cursor) query.cursor = cursor;
+    const r = await xrpc(session.pds, "com.atproto.repo.listRecords", {
+      query,
+      headers: { authorization: `Bearer ${session.accessJwt}` },
+    });
+    if (!r.ok) return r;
+    const data = r.value as {
+      records?: { uri?: string; value?: { subject?: string } }[];
+      cursor?: string;
+    };
+    for (const rec of data.records ?? []) {
+      const subject = rec.value?.subject;
+      const rkey = rec.uri ? rkeyFromAtUri(rec.uri) : null;
+      if (typeof subject === "string" && rkey && !map.has(subject)) map.set(subject, rkey);
+    }
+    cursor = data.cursor;
+    if (!cursor) break;
+  }
+  return ok(map);
 }

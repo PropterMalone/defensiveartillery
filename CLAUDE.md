@@ -64,8 +64,13 @@ When the user gives you a Bluesky post URL and asks to sweep its quotes:
   second post quoting the same people, will create a *duplicate* block record for anyone already
   blocked. Harmless (Bluesky treats them as blocked either way) but untidy. Avoid re-blocking the
   same set.
-- There is no built-in unblock here. To reverse a block, the user unblocks in the Bluesky app or
-  via ErgoBlock. So bias toward the conservative suggestion bar above — getting it wrong is not
-  one keystroke to undo.
+- Every applied block/mute is recorded to `sweeps.jsonl` (gitignored), grouped per run. If the
+  user wants to undo:
+  - `npm run unblock -- --last --confirm` reverses the **most recent** sweep entirely (unblocks
+    blocks, unmutes mutes). Show `npm run unblock -- --last` (dry run) first so they see the list.
+  - `npm run unblock -- --confirm <did…>` lifts specific accounts (add `--mute` to unmute). This
+    works even for accounts not in the log — it looks up the block record on their account.
+  Still bias toward the conservative suggestion bar above; undo exists, but getting it right the
+  first time is better.
 - If the user just says "block the obvious ones," still show the grid and your picks first —
   one confirmation, then fire.

@@ -11,6 +11,7 @@
   "scripts": {
     "quotes": "tsx src/cli.ts quotes",
     "block": "tsx src/cli.ts block",
+    "unblock": "tsx src/cli.ts unblock",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "lint": "biome check src",
