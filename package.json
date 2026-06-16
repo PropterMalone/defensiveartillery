@@ -1,0 +1,26 @@
+{
+  "name": "defensiveartillery",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Fetch the quote-posts of a Bluesky post and bulk block/mute the rude ones, driven through Claude Code.",
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "scripts": {
+    "quotes": "tsx src/cli.ts quotes",
+    "block": "tsx src/cli.ts block",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "lint": "biome check src",
+    "format": "biome format --write src",
+    "validate": "biome check src && tsc --noEmit && vitest run"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^1.9.4",
+    "@types/node": "22.19.21",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
+  }
+}
