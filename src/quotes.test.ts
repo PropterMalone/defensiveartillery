@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { type RawPost, dedupeByDid, toRows } from "./quotes.js";
+import { dedupeByDid, toRows } from "./quotes.js";
+import type { RawPost } from "./types.js";
 
 const post = (did: string, text: string, handle = `${did}.test`): RawPost => ({
   uri: `at://${did}/app.bsky.feed.post/x`,

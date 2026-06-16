@@ -136,22 +136,40 @@ async function cmdBlock(args: string[]): Promise<void> {
   }
 
   const session = await resolveSession();
+
+  // Skip accounts already blocked so re-runs are idempotent (blocks only — muteActor is already
+  // a server-side no-op when re-muting). If the lookup fails, proceed without dedup.
+  let alreadyBlocked = new Set<string>();
+  if (!mute) {
+    const existing = await listBlocks(session);
+    if (existing.ok) alreadyBlocked = new Set(existing.value.keys());
+  }
+
   const sweepId = new Date().toISOString();
   process.stdout.write(`${verb === "block" ? "Blocking" : "Muting"} ${dids.length} account(s)…\n`);
   let okCount = 0;
+  let skipped = 0;
+  let failures = 0;
   for (const did of dids) {
     if (mute) {
       const r = await muteActor(session, did);
       if (!r.ok) {
         process.stderr.write(`  ✗ ${did}: ${r.error}\n`);
+        failures++;
         continue;
       }
       appendSweep({ sweepId, kind, did });
       process.stdout.write(`  ✓ muted ${did}\n`);
     } else {
+      if (alreadyBlocked.has(did)) {
+        process.stdout.write(`  – already blocked ${did} (skipped)\n`);
+        skipped++;
+        continue;
+      }
       const r = await createBlock(session, buildBlockRecord(did, sweepId));
       if (!r.ok) {
         process.stderr.write(`  ✗ ${did}: ${r.error}\n`);
+        failures++;
         continue;
       }
       appendSweep({ sweepId, kind, did, uri: r.value.uri });
@@ -159,8 +177,11 @@ async function cmdBlock(args: string[]): Promise<void> {
     }
     okCount++;
   }
-  process.stdout.write(`\nDone: ${okCount}/${dids.length} ${verb}ed. Logged to ${SWEEP_LOG}.\n`);
-  if (okCount < dids.length) process.exit(1);
+  const skipNote = skipped > 0 ? ` (${skipped} already blocked)` : "";
+  process.stdout.write(
+    `\nDone: ${okCount}/${dids.length} ${verb}ed${skipNote}. Logged to ${SWEEP_LOG}.\n`,
+  );
+  if (failures > 0) process.exit(1);
 }
 
 async function cmdUnblock(args: string[]): Promise<void> {

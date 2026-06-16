@@ -3,9 +3,10 @@
 // this module only does network I/O and returns Results for expected failures.
 
 import type { BlockRecord } from "./block-record.js";
-import type { RawPost } from "./quotes.js";
+import { pdsEndpointFromDidDoc } from "./did-doc.js";
 import { type Result, err, ok } from "./result.js";
 import { rkeyFromAtUri } from "./sweep-log.js";
+import type { RawPost } from "./types.js";
 
 // Routing: public reads (resolveHandle, getQuotes) go to the unauthenticated APPVIEW;
 // authenticated writes (createRecord, muteActor) go to the user's PDS (session.pds).
@@ -20,6 +21,19 @@ export interface Session {
   pds: string;
 }
 
+const MAX_RETRIES = 3;
+const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+
+/** Backoff for a 429: honor Retry-After (seconds) if present, else exponential (1s, 2s, 4s). */
+function retryDelayMs(headers: Headers, attempt: number): number {
+  const ra = headers.get("retry-after");
+  if (ra) {
+    const s = Number(ra);
+    if (Number.isFinite(s) && s >= 0) return Math.min(s * 1000, 30_000);
+  }
+  return Math.min(1000 * 2 ** attempt, 30_000);
+}
+
 async function xrpc(
   base: string,
   nsid: string,
@@ -27,27 +41,35 @@ async function xrpc(
 ): Promise<Result<unknown>> {
   const { query, ...rest } = init;
   const qs = query ? `?${new URLSearchParams(query).toString()}` : "";
-  let res: Response;
-  try {
-    res = await fetch(`${base}/xrpc/${nsid}${qs}`, rest);
-  } catch (e) {
-    return err(`network error calling ${nsid}: ${(e as Error).message}`);
+  const url = `${base}/xrpc/${nsid}${qs}`;
+  for (let attempt = 0; ; attempt++) {
+    let res: Response;
+    try {
+      res = await fetch(url, rest);
+    } catch (e) {
+      return err(`network error calling ${nsid}: ${(e as Error).message}`);
+    }
+    // AT Proto rate-limits writes; back off and retry on 429 before giving up.
+    if (res.status === 429 && attempt < MAX_RETRIES) {
+      await sleep(retryDelayMs(res.headers, attempt));
+      continue;
+    }
+    const body = await res.text();
+    let json: unknown;
+    try {
+      json = body === "" ? {} : JSON.parse(body);
+    } catch {
+      return err(`${nsid} returned non-JSON (HTTP ${res.status}): ${body.slice(0, 200)}`);
+    }
+    if (!res.ok) {
+      const msg =
+        (json as { message?: string; error?: string }).message ??
+        (json as { error?: string }).error ??
+        `HTTP ${res.status}`;
+      return err(`${nsid} failed: ${msg}`);
+    }
+    return ok(json);
   }
-  const body = await res.text();
-  let json: unknown;
-  try {
-    json = body === "" ? {} : JSON.parse(body);
-  } catch {
-    return err(`${nsid} returned non-JSON (HTTP ${res.status}): ${body.slice(0, 200)}`);
-  }
-  if (!res.ok) {
-    const msg =
-      (json as { message?: string; error?: string }).message ??
-      (json as { error?: string }).error ??
-      `HTTP ${res.status}`;
-    return err(`${nsid} failed: ${msg}`);
-  }
-  return ok(json);
 }
 
 /** Resolve a handle (peark.es) to a DID. Pass-through if already a DID. */
@@ -72,9 +94,16 @@ export async function createSession(
     body: JSON.stringify({ identifier, password: appPassword }),
   });
   if (!r.ok) return r;
-  const { did, accessJwt } = r.value as { did?: string; accessJwt?: string };
+  const { did, accessJwt, didDoc } = r.value as {
+    did?: string;
+    accessJwt?: string;
+    didDoc?: unknown;
+  };
   if (!did || !accessJwt) return err("createSession response missing did/accessJwt");
-  return ok({ did, accessJwt, pds });
+  // Prefer the account's real PDS from the DID doc (correct for PDS-migrated users); fall back to
+  // the auth host (the entryway forwards writes for bsky.social-hosted accounts).
+  const resolvedPds = pdsEndpointFromDidDoc(didDoc) ?? pds;
+  return ok({ did, accessJwt, pds: resolvedPds });
 }
 
 /** Page through every quote post of the subject. Public appview, no auth needed. */

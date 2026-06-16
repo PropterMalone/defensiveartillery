@@ -1,15 +1,7 @@
 // pattern: Functional Core
 // Shape raw appview posts into review-grid rows, and reduce rows to a block target set.
 
-import type { QuoteRow } from "./types.js";
-
-/** The slice of app.bsky.feed.getQuotes#posts we care about. Unknown fields ignored. */
-export interface RawPost {
-  uri?: unknown;
-  indexedAt?: unknown;
-  author?: { did?: unknown; handle?: unknown; displayName?: unknown };
-  record?: { text?: unknown };
-}
+import type { QuoteRow, RawPost } from "./types.js";
 
 const str = (v: unknown): string => (typeof v === "string" ? v : "");
 

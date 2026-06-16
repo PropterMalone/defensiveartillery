@@ -59,11 +59,9 @@ When the user gives you a Bluesky post URL and asks to sweep its quotes:
   There is no auto-expiration — for temporary blocks, the user wants ErgoBlock instead.
 - Quotes come from the public appview, so a quote that's already detached or from an account
   that blocks the subject may not appear. The count is "what's publicly visible now."
-- Passing the same DID twice **in one `block` invocation** is safe — duplicates are collapsed.
-  But the tool does NOT check the user's existing blocks: re-running a sweep, or sweeping a
-  second post quoting the same people, will create a *duplicate* block record for anyone already
-  blocked. Harmless (Bluesky treats them as blocked either way) but untidy. Avoid re-blocking the
-  same set.
+- The `block` step is idempotent: it checks the user's existing block list and skips anyone
+  already blocked, so re-running a sweep — or sweeping a second post that quotes the same people —
+  creates no duplicate block records. (Re-muting an already-muted account is likewise a no-op.)
 - Every applied block/mute is recorded to `sweeps.jsonl` (gitignored), grouped per run. If the
   user wants to undo:
   - `npm run unblock -- --last --confirm` reverses the **most recent** sweep entirely (unblocks

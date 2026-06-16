@@ -17,3 +17,11 @@ export interface QuoteRow {
   uri: string;
   indexedAt: string;
 }
+
+/** The slice of app.bsky.feed.getQuotes#posts we care about. Unknown fields ignored. */
+export interface RawPost {
+  uri?: unknown;
+  indexedAt?: unknown;
+  author?: { did?: unknown; handle?: unknown; displayName?: unknown };
+  record?: { text?: unknown };
+}
