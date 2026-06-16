@@ -13,6 +13,7 @@ import {
   resolveDid,
 } from "./atproto.js";
 import { buildBlockRecord } from "./block-record.js";
+import { parseDotEnv } from "./dotenv.js";
 import { renderGrid } from "./grid.js";
 import { parsePostUrl, toPostAtUri } from "./post-url.js";
 import { dedupeByDid, toRows } from "./quotes.js";
@@ -30,20 +31,9 @@ function loadDotEnv(): void {
   } catch {
     return;
   }
-  for (const line of text.split("\n")) {
-    const trimmed = line.trim();
-    if (trimmed === "" || trimmed.startsWith("#")) continue;
-    const eq = trimmed.indexOf("=");
-    if (eq === -1) continue;
-    const key = trimmed.slice(0, eq).trim();
-    let value = trimmed.slice(eq + 1).trim();
-    if (
-      (value.startsWith('"') && value.endsWith('"')) ||
-      (value.startsWith("'") && value.endsWith("'"))
-    ) {
-      value = value.slice(1, -1);
-    }
-    if (key !== "" && process.env[key] === undefined) process.env[key] = value;
+  // Parsing is pure (dotenv.ts); here we only apply, without overriding already-set vars.
+  for (const [key, value] of Object.entries(parseDotEnv(text))) {
+    if (process.env[key] === undefined) process.env[key] = value;
   }
 }
 
@@ -127,9 +117,18 @@ async function cmdBlock(args: string[]): Promise<void> {
     die("BSKY_HANDLE and BSKY_APP_PASSWORD must be set (copy .env.example to .env)");
   }
   const pds = process.env.BSKY_PDS || DEFAULT_PDS;
+  if (!pds.startsWith("https://")) {
+    die(
+      `BSKY_PDS must be an https:// URL (got: ${pds}); refusing to send credentials over a non-HTTPS host`,
+    );
+  }
 
   const session = await createSession(pds, handle, password);
-  if (!session.ok) die(session.error);
+  if (!session.ok) {
+    die(
+      `${session.error}\n(if your account was PDS-migrated or self-hosted, set BSKY_PDS in .env to your PDS URL)`,
+    );
+  }
 
   const createdAt = new Date().toISOString();
   process.stdout.write(`${verb === "block" ? "Blocking" : "Muting"} ${dids.length} account(s)…\n`);

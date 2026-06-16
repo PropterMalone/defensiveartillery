@@ -18,6 +18,9 @@ describe("truncate", () => {
   it("adds an ellipsis past the limit", () => {
     expect(truncate("abcdefghij", 5)).toBe("abcd…");
   });
+  it("leaves a string at exactly the limit untouched", () => {
+    expect(truncate("abcde", 5)).toBe("abcde");
+  });
 });
 
 describe("renderGrid", () => {
@@ -29,5 +32,12 @@ describe("renderGrid", () => {
     const md = renderGrid([row("a.test", "x | y"), row("b.test", "z")]);
     expect(md).toContain("| 1 | @a.test | x \\| y |");
     expect(md).toContain("| 2 | @b.test | z |");
+  });
+
+  it("falls back to the DID when a quoter has no handle", () => {
+    const noHandle = { ...row("", "rude"), did: "did:plc:nohandle" };
+    const md = renderGrid([noHandle]);
+    expect(md).toContain("| 1 | did:plc:nohandle | rude |");
+    expect(md).not.toContain("@ ");
   });
 });

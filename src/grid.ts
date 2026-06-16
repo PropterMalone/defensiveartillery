@@ -13,8 +13,13 @@ export function truncate(text: string, max: number): string {
 export function renderGrid(rows: readonly QuoteRow[]): string {
   if (rows.length === 0) return "_No quote posts found._";
   const header = "| # | handle | quote |\n|---|--------|-------|";
+  const esc = (s: string) => s.replace(/\|/g, "\\|");
   const body = rows
-    .map((r, i) => `| ${i + 1} | @${r.handle} | ${truncate(r.text, 80).replace(/\|/g, "\\|")} |`)
+    .map((r, i) => {
+      // Fall back to the DID when a quoter has no handle, so the cell is never a bare "@".
+      const who = r.handle ? `@${r.handle}` : r.did;
+      return `| ${i + 1} | ${esc(who)} | ${esc(truncate(r.text, 80))} |`;
+    })
     .join("\n");
   return `${header}\n${body}`;
 }

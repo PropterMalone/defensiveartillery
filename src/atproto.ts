@@ -6,7 +6,11 @@ import type { BlockRecord } from "./block-record.js";
 import type { RawPost } from "./quotes.js";
 import { type Result, err, ok } from "./result.js";
 
+// Routing: public reads (resolveHandle, getQuotes) go to the unauthenticated APPVIEW;
+// authenticated writes (createRecord, muteActor) go to the user's PDS (session.pds).
 const APPVIEW = "https://public.api.bsky.app";
+// Default assumes a bsky.social-hosted account (the entryway forwards writes to the real PDS).
+// Self-hosted or PDS-migrated users must set BSKY_PDS to their actual PDS.
 export const DEFAULT_PDS = "https://bsky.social";
 
 export interface Session {
@@ -77,7 +81,9 @@ export async function getAllQuotes(subjectAtUri: string): Promise<Result<RawPost
   const all: RawPost[] = [];
   let cursor: string | undefined;
   // Bounded so a runaway cursor can't loop forever; 50 pages * 100 = 5000 quotes.
-  for (let page = 0; page < 50; page++) {
+  const MAX_PAGES = 50;
+  let page = 0;
+  for (; page < MAX_PAGES; page++) {
     const query: Record<string, string> = { uri: subjectAtUri, limit: "100" };
     if (cursor) query.cursor = cursor;
     const r = await xrpc(APPVIEW, "app.bsky.feed.getQuotes", { query });
@@ -85,7 +91,14 @@ export async function getAllQuotes(subjectAtUri: string): Promise<Result<RawPost
     const data = r.value as { posts?: RawPost[]; cursor?: string };
     if (Array.isArray(data.posts)) all.push(...data.posts);
     cursor = data.cursor;
-    if (!cursor || (data.posts?.length ?? 0) === 0) break;
+    // AT Proto signals end-of-feed by omitting the cursor. An empty page that still
+    // carries a cursor is not the end — break only when the cursor is gone.
+    if (!cursor) break;
+  }
+  if (cursor && page === MAX_PAGES) {
+    process.stderr.write(
+      `warning: stopped at the ${MAX_PAGES * 100}-quote cap; more quotes exist but were not fetched\n`,
+    );
   }
   return ok(all);
 }
